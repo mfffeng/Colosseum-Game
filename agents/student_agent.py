@@ -82,25 +82,23 @@ class StudentAgent(Agent):
                 if board[x][y][direction] == 0 and (x, y) != adv_position and (x, y) not in visited:
                         result.append((x, y, direction))
             result += StudentAgent.valid_steps(board, (x, y), adv_position, max_step - 1, visited)
+        
+        # Experimental: sort the result to let moves that shorten the distance to the opponent be examined first
+        result = sorted(result, key=lambda x: (x[0] - adv_position[0]) ** 2 + (x[1] - adv_position[1] ** 2))[:3]
+
         return result
-        '''
-        left = StudentAgent.valid_steps(board, (my_pos[0] - 1, my_pos[1]), adv_position, max_step - 1)
-        right = StudentAgent.valid_steps(board, (my_pos[0] + 1, my_pos[1]), adv_position, max_step - 1)
-        up = StudentAgent.valid_steps(board, (my_pos[0], my_pos[1] + 1), adv_position, max_step - 1)
-        down = StudentAgent.valid_steps(board, (my_pos[0], my_pos[1] - 1), adv_position, max_step - 1)            
-        return result + left + right + up + down'''
 
     @staticmethod
     def a_b_pruning(board, my_pos, adv_pos, max_step, a, b, is_max):
         stats = StudentAgent.check_status(board, my_pos, adv_pos)
-        potential_steps = StudentAgent.valid_steps(board, my_pos, adv_pos, max_step, set())
-        for d in (0, 1, 2, 3):      # Stay where you are
-            if board[my_pos[0]][my_pos[1]][d] == 0:
-                potential_steps.append((my_pos[0], my_pos[1], d))
         if stats[0]:
             if is_max:
                 return (-1, -1, -1, stats[1])
             return (-1, -1, -1, -stats[1])      # Invert the score if ending in min player's term 
+        potential_steps = StudentAgent.valid_steps(board, my_pos, adv_pos, max_step, set())
+        for d in (0, 1, 2, 3):      # Stay where you are
+            if board[my_pos[0]][my_pos[1]][d] == 0:
+                potential_steps.append((my_pos[0], my_pos[1], d))
         if is_max:
             best = (-1, -1, -1, -10000)
             # for i in (StudentAgent.valid_steps(board, my_pos, adv_pos, max_step, set())):
