@@ -70,6 +70,7 @@ class StudentAgent(Agent):
             x, y = my_pos[0] + m[0], my_pos[1] + m[1]
             if not (0 <= x and x < board.shape[0] and 0 <= y and y < board.shape[1]):
                 continue
+            # Can't go through boundaries
             if num == 0 and board[x][y][2] == 1:
                 continue
             if num == 1 and board[x][y][3] == 1:
@@ -84,29 +85,50 @@ class StudentAgent(Agent):
             result += StudentAgent.valid_steps(board, (x, y), adv_position, max_step - 1, visited)
         
         # Experimental: sort the result to let moves that shorten the distance to the opponent be examined first
-        result = sorted(result, key=lambda x: (x[0] - adv_position[0]) ** 2 + (x[1] - adv_position[1] ** 2))[:3]
-
+        result = sorted(result, key=lambda x: (x[0] - adv_position[0]) ** 2 + (x[1] - adv_position[1] ** 2))
+        
         return result
 
     @staticmethod
-    def a_b_pruning(board, my_pos, adv_pos, max_step, a, b, is_max):
+    def early_evaluation(board, my_pos, adv_pos):
+        my_count = 0
+        for i in range(max(my_pos[0] - 2, 0), min(my_pos[0] + 2, board.shape[0])):
+            for j in range(max(my_pos[1] - 2, 0), min(my_pos[1] + 2, board.shape[1])):
+                for k in range(4):
+                    if board[i][j][k]:
+                        my_count -= 1
+        for i in range(max(adv_pos[0] - 2, 0), min(adv_pos[0] + 2, board.shape[0])):
+            for j in range(max(adv_pos[1] - 2, 0), min(adv_pos[1] + 2, board.shape[1])):
+                for k in range(4):
+                    if board[i][j][k]:
+                        my_count += 1
+        return my_count
+
+    @staticmethod
+    def a_b_pruning(board, my_pos, adv_pos, max_step, a, b, is_max, depth):
+        if depth == 0:
+            result = StudentAgent.early_evaluation(board, my_pos, adv_pos)
+            if is_max:
+                return (-1, -1, -1, result)
+            return (-1, -1, -1, -result)
+        
         stats = StudentAgent.check_status(board, my_pos, adv_pos)
         if stats[0]:
             if is_max:
                 return (-1, -1, -1, stats[1])
-            return (-1, -1, -1, -stats[1])      # Invert the score if ending in min player's term 
+            return (-1, -1, -1, -stats[1])      # Invert the score if ending in min player's term
         potential_steps = StudentAgent.valid_steps(board, my_pos, adv_pos, max_step, set())
+
+        '''
+        # It seems that stay where you are is likely to cause suicide
         for d in (0, 1, 2, 3):      # Stay where you are
             if board[my_pos[0]][my_pos[1]][d] == 0:
-                potential_steps.append((my_pos[0], my_pos[1], d))
+                potential_steps.append((my_pos[0], my_pos[1], d))'''
         if is_max:
             best = (-1, -1, -1, -10000)
-            # for i in (StudentAgent.valid_steps(board, my_pos, adv_pos, max_step, set())):
-                # print(i)       # For testing the valid_steps() function
-            # sys.exit(1)
             for i in potential_steps:
                 board[i[0]][i[1]][i[2]] = True
-                val = StudentAgent.a_b_pruning(board, adv_pos, (i[0], i[1]), max_step, a, b, False)
+                val = StudentAgent.a_b_pruning(board, adv_pos, (i[0], i[1]), max_step, a, b, False, depth - 1)
                 board[i[0]][i[1]][i[2]] = False
                 val = (i[0], i[1], i[2], val[2])            
                 best = best if best[3] > val[3] else val
@@ -118,7 +140,7 @@ class StudentAgent(Agent):
             best = (-1, -1, -1, 10000)
             for i in potential_steps:
                 board[i[0]][i[1]][i[2]] = True
-                val = StudentAgent.a_b_pruning(board, adv_pos, (i[0], i[1]), max_step, a, b, True)
+                val = StudentAgent.a_b_pruning(board, adv_pos, (i[0], i[1]), max_step, a, b, True, depth - 1)
                 board[i[0]][i[1]][i[2]] = False            
                 val = (i[0], i[1], i[2], val[2])
                 best = best if best[3] < val[3] else val
@@ -143,5 +165,5 @@ class StudentAgent(Agent):
         Please check the sample implementation in agents/random_agent.py or agents/human_agent.py for more details.
         """
         # dummy return
-        output = StudentAgent.a_b_pruning(chess_board, my_pos, adv_pos, max_step, -10000, 10000, True)
+        output = StudentAgent.a_b_pruning(chess_board, my_pos, adv_pos, max_step, -10000, 10000, True, 3)
         return output[:2], output[2]
