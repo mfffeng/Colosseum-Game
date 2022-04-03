@@ -1,4 +1,6 @@
 # Student agent: Add your own agent here
+from cmath import inf
+from multiprocessing.sharedctypes import Value
 from agents.agent import Agent
 from store import register_agent
 import numpy as np
@@ -23,7 +25,8 @@ class StudentAgent(Agent):
             "l": 3,
         }
         self.moves = ((-1, 0), (0, 1), (1, 0), (0, -1))
-
+        
+ 
     def check_endgame(self, board_size, chessboard, p0_pos, p1_pos):
         """
         Check if the game ends and compute the current score of the agents.
@@ -73,18 +76,15 @@ class StudentAgent(Agent):
         return True, p0_score, p1_score
 
     def random_move_heuristic(self, chess_board, my_pos, adv_pos):
-        endgame = None
+        endgame = (False, 1, 1)
         board_size = chess_board.shape[0]
-        new_board = chess_board.deep_copy()
+        new_board = np.copy(chess_board)
         while not endgame[0]:
-            dir = np.random.randint(0, 4)
-            r = np.random.randint(0, board_size)
-            c = np.random.randint(0, board_size)
-            # Put Barrier
-            while new_board[r, c, dir]:
-                dir = np.random.randint(0, 4)
-                r = np.random.randint(0, board_size)
-                c = np.random.randint(0, board_size)
+            indices = np.where(new_board == False)
+            rand_ind = np.random.randint(0, len(indices[0]))
+            r = indices[0][rand_ind]
+            c = indices[1][rand_ind]
+            dir = indices[2][rand_ind]
             # Place barrier
             new_board[r, c, dir] = True
             # Place barrier on opposite side
@@ -92,7 +92,95 @@ class StudentAgent(Agent):
             new_board[r + move[0], c + move[1], (dir + 2) % 4] = True
             endgame = self.check_endgame(board_size, new_board, my_pos, adv_pos);    
         # our score - their score
-        return endgame[1] - endgame[2]        
+        return endgame[2] - endgame[1]        
+
+    # returns a, b,, score 
+    def a_b_pruning(self, chess_board, my_pos, adv_pos, max_step, alpha=-inf, beta=inf, is_max=True, level=0):
+        board_size = chess_board.shape[0]
+
+        # Check if leaf node                
+        endgame = self.check_endgame(board_size, chess_board, my_pos, adv_pos)
+        if endgame[0]:
+            # If it's leaf, return the score
+            return endgame[1] - endgame[2]
+
+        # Heuristic at depth 4    
+        if level >= 2:
+            return self.random_move_heuristic(chess_board, my_pos, adv_pos) 
+        og_pos = my_pos if is_max else adv_pos
+        other_pos = adv_pos if is_max else my_pos
+        # Start w/ adv so we don't add it
+        potential_places = [] # Make sure we don't add it
+        frontier = [(og_pos[0],og_pos[1],0)] # Last number indicates the depth
+        while frontier:
+            nx, ny, step = frontier.pop()
+            # Don't expand nodes @ max step 
+            if step == max_step:
+                potential_places.append( (nx, ny) )
+                continue
+            # self.moves[0] = (-1,0)
+            if not chess_board[nx, ny, 0]:
+                new_pos = (nx - 1, ny)
+                if new_pos not in potential_places:
+                    frontier.append((new_pos[0], new_pos[1], step+1))
+            # self.moves[1] = (0, 1)    
+            if not chess_board[nx, ny, 1]:
+                new_pos = (nx, ny + 1)
+                if new_pos not in potential_places:
+                    frontier.append((new_pos[0], new_pos[1], step+1))
+
+            # self.moves[2] = (1, 0)       
+            if not chess_board[nx, ny, 2]:
+                new_pos = (nx + 1, ny)
+                if new_pos not in potential_places:
+                    frontier.append((new_pos[0], new_pos[1], step+1))
+            # self.moves[3] = (0, -1)    
+            if not chess_board[nx, ny, 3]:
+                new_pos =(nx, ny - 1)
+                if new_pos not in potential_places:
+                    frontier.append((new_pos[0], new_pos[1], step+1))
+            potential_places.append( (nx, ny) )    
+        try:
+            potential_places.remove(other_pos)   
+        except ValueError:
+            pass           
+        # Otherwise, loop over successors    
+        if is_max:
+            for i in potential_places:
+                for dir in [0,1,2,3]:
+                    if chess_board[ i[0], i[1], dir]:
+                        continue
+                    # Make change 
+                    chess_board[i[0], i[1], dir] = True
+                    move = self.moves[dir]
+                    chess_board[i[0] + move[0], i[1] + move[1], (dir + 2) % 4] = True
+                    # Recursive
+                    min_val = self.a_b_pruning(chess_board, i, adv_pos, max_step, alpha, beta, False, level+1)
+                    alpha = max(alpha, min_val)
+                    # Undo Change
+                    chess_board[i[0], i[1], dir] = False
+                    chess_board[i[0] + move[0], i[1] + move[1], (dir+ 2) % 4] = False
+                    if alpha >= beta:
+                        return beta
+            return alpha
+        else:
+            for i in potential_places:
+                for dir in [0,1,2,3]:
+                    if chess_board[ i[0], i[1], dir]:
+                        continue
+                    # Make Change
+                    chess_board[i[0], i[1], dir] = True
+                    move = self.moves[dir]
+                    chess_board[i[0] + move[0], i[1] + move[1], (dir + 2) % 4] = True
+                    # Recursive
+                    max_val = self.a_b_pruning(chess_board, my_pos, i, max_step, alpha, beta, True, level+1)
+                    beta = min(beta, max_val)
+                    # Undo Change
+                    chess_board[i[0], i[1], dir] = False
+                    chess_board[i[0] + move[0], i[1] + move[1], (dir+ 2) % 4] = False
+                    if alpha >= beta:
+                        return alpha
+            return beta
 
 
     def step(self, chess_board, my_pos, adv_pos, max_step):
@@ -110,5 +198,60 @@ class StudentAgent(Agent):
 
         Please check the sample implementation in agents/random_agent.py or agents/human_agent.py for more details.
         """
-        # dummy return
-        return my_pos, self.dir_map["u"]
+        # Do first ab_pruning level ourselves
+        potential_places = [] # Make sure we don't add it
+        frontier = [(my_pos[0],my_pos[1],0)] # Last number indicates the depth
+        while frontier:
+            nx, ny, step = frontier.pop()
+            # Don't expand nodes @ max step 
+            if step == max_step:
+                potential_places.append( (nx, ny) )
+                continue
+            # self.moves[0] = (-1,0)
+            if not chess_board[nx, ny, 0]:
+                new_pos = (nx - 1, ny)
+                if new_pos not in potential_places:
+                    frontier.append((new_pos[0], new_pos[1], step+1))
+            # self.moves[1] = (0, 1)    
+            if not chess_board[nx, ny, 1]:
+                new_pos = (nx, ny + 1)
+                if new_pos not in potential_places:
+                    frontier.append((new_pos[0], new_pos[1], step+1))
+
+            # self.moves[2] = (1, 0)       
+            if not chess_board[nx, ny, 2]:
+                new_pos = (nx + 1, ny)
+                if new_pos not in potential_places:
+                    frontier.append((new_pos[0], new_pos[1], step+1))
+            # self.moves[3] = (0, -1)    
+            if not chess_board[nx, ny, 3]:
+                new_pos =(nx, ny - 1)
+                if new_pos not in potential_places:
+                    frontier.append((new_pos[0], new_pos[1], step+1))
+            potential_places.append( (nx, ny) )
+        potential_places.remove(adv_pos)   
+        try:
+            potential_places.remove(adv_pos)   
+        except ValueError:
+            pass            
+        # Start ab pruning       
+        alpha = -inf
+        beta = inf
+        for i in potential_places:
+            for dir in [0,1,2,3]:
+                if chess_board[ i[0], i[1], dir]:
+                    continue
+                # Make change 
+                chess_board[i[0], i[1], dir] = True
+                move = self.moves[dir]
+                chess_board[i[0] + move[0], i[1] + move[1], (dir + 2) % 4] = True
+                # Recursive
+                min_val = self.a_b_pruning(chess_board, i, adv_pos, max_step, alpha, beta, False, 1)
+                if min_val > alpha:
+                    best_move = i
+                    best_dir = dir
+                    alpha = min_val   
+                # Undo Change
+                chess_board[i[0], i[1], dir] = False
+                chess_board[i[0] + move[0], i[1] + move[1], (dir+ 2) % 4] = False
+        return best_move, best_dir
