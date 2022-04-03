@@ -11,7 +11,8 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": [ "--player_1", "student_agent", "--player_2", "student_agent", "--display"]
+            "args": [ "--player_1", "student_agent", "--player_2", "student_agent", "--display",
+                      "--board_size", "5"]
         }
     ]
 }

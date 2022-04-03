@@ -92,7 +92,7 @@ class StudentAgent(Agent):
             new_board[r + move[0], c + move[1], (dir + 2) % 4] = True
             endgame = self.check_endgame(board_size, new_board, my_pos, adv_pos);    
         # our score - their score
-        return endgame[2] - endgame[1]        
+        return endgame[2] - endgame[1]
 
     # returns a, b,, score 
     def a_b_pruning(self, chess_board, my_pos, adv_pos, max_step, alpha=-inf, beta=inf, is_max=True, level=0):
@@ -139,9 +139,10 @@ class StudentAgent(Agent):
                 new_pos =(nx, ny - 1)
                 if new_pos not in potential_places:
                     frontier.append((new_pos[0], new_pos[1], step+1))
-            potential_places.append( (nx, ny) )    
+            if (nx,ny) not in potential_places:
+                potential_places.append( (nx, ny) )    
         try:
-            potential_places.remove(other_pos)   
+            potential_places.remove(other_pos)
         except ValueError:
             pass           
         # Otherwise, loop over successors    
@@ -228,8 +229,8 @@ class StudentAgent(Agent):
                 new_pos =(nx, ny - 1)
                 if new_pos not in potential_places:
                     frontier.append((new_pos[0], new_pos[1], step+1))
-            potential_places.append( (nx, ny) )
-        potential_places.remove(adv_pos)   
+            if (nx,ny) not in potential_places:
+                potential_places.append( (nx, ny) )       
         try:
             potential_places.remove(adv_pos)   
         except ValueError:
