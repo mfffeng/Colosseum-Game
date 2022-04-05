@@ -25,6 +25,7 @@ class StudentAgent(Agent):
             "l": 3,
         }
         self.moves = ((-1, 0), (0, 1), (1, 0), (0, -1))
+        self.autoplay = True
         
  
     def check_endgame(self, board_size, chessboard, p0_pos, p1_pos):
@@ -94,7 +95,86 @@ class StudentAgent(Agent):
         # our score - their score
         return endgame[2] - endgame[1]
 
-    # returns a, b,, score 
+
+    # Weigh walls by radius from user    
+    def wall_count_heuristic(self, board, my_pos, adv_pos):
+        new_board = np.copy(board)
+        my_count = 0
+        wall_count = 0
+        # Edge walls are only being counted once, must account for
+        for i in range(0, board.shape[0]):
+            for j in range(0, board.shape[1]):
+                val = np.sqrt((i-my_pos[0])*(i-my_pos[0]) + (j-my_pos[1])*(j-my_pos[1]))
+                val -= np.sqrt((i-adv_pos[0])*(i-adv_pos[0]) + (j-adv_pos[1])*(j-adv_pos[1]))
+                
+                # moves = ((-1, 0), (0, 1), (1, 0), (0, -1))
+                if new_board[i,j,0]:
+                    my_count += val
+                    if i != 0:
+                        new_board[i-1,j,2]=False
+                    wall_count += 1    
+                if new_board[i,j,1]:
+                    my_count += val
+                    if j != board.shape[0]-1:
+                        new_board[i,j+1,3]=False
+                    wall_count += 1      
+                if new_board[i,j,2]:
+                    my_count += val
+                    if i != board.shape[0]-1:
+                        new_board[i+1,j,0]=False
+                    wall_count += 1      
+                if new_board[i,j,3]:
+                    my_count += val
+                    if j != 0:
+                        new_board[i,j-1,1]=False
+                    wall_count += 1      
+        return (10.0/board.shape[0]) * my_count / wall_count
+
+    def opponent_edge_heuristic(self, board, my_pos, adv_pos):
+        min_x_adv = min(board.shape[0]- adv_pos[0], adv_pos[0]+1)
+        min_y_adv = min(board.shape[1] - adv_pos[1], adv_pos[1]+1)
+        min_x = min(board.shape[0] - my_pos[0], my_pos[0]+1)
+        min_y = min(board.shape[1] - my_pos[1], my_pos[1]+1)
+        return 0.1*((1.0/(min_x_adv+min_y_adv)) - (1.0/(min_x+min_y)))
+
+    def get_potential_places(self, board, og_pos, other_pos, max_step):
+        # Start w/ adv so we don't add it
+        potential_places = [] # Make sure we don't add it
+        frontier = [(og_pos[0],og_pos[1],0)] # Last number indicates the depth
+        while frontier:
+            nx, ny, step = frontier.pop(0)
+            # Don't expand nodes @ max step 
+            if step == max_step:
+                if (nx,ny) not in potential_places:
+                    potential_places.append( (nx, ny) ) 
+                continue
+            # self.moves[0] = (-1,0)
+            if not board[nx, ny, 0]:
+                new_pos = (nx - 1, ny)
+                if new_pos not in potential_places and new_pos != other_pos:
+                    frontier.append((new_pos[0], new_pos[1], step+1))
+            # self.moves[1] = (0, 1)    
+            if not board[nx, ny, 1]:
+                new_pos = (nx, ny + 1)
+                if new_pos not in potential_places and new_pos != other_pos:
+                    frontier.append((new_pos[0], new_pos[1], step+1))
+
+            # self.moves[2] = (1, 0)       
+            if not board[nx, ny, 2]:
+                new_pos = (nx + 1, ny)
+                if new_pos not in potential_places and new_pos != other_pos:
+                    frontier.append((new_pos[0], new_pos[1], step+1))
+            # self.moves[3] = (0, -1)    
+            if not board[nx, ny, 3]:
+                new_pos =(nx, ny - 1)
+                if new_pos not in potential_places and new_pos != other_pos:
+                    frontier.append((new_pos[0], new_pos[1], step+1))
+            if (nx,ny) not in potential_places:
+                potential_places.append( (nx, ny) ) 
+        return potential_places        
+
+
+    # returns score
     def a_b_pruning(self, chess_board, my_pos, adv_pos, max_step, alpha=-inf, beta=inf, is_max=True, level=0):
         board_size = chess_board.shape[0]
 
@@ -103,48 +183,13 @@ class StudentAgent(Agent):
         if endgame[0]:
             # If it's leaf, return the score
             return endgame[1] - endgame[2]
-
-        # Heuristic at depth 4    
+        
+        # Heuristic at depth 2    
         if level >= 2:
-            return self.random_move_heuristic(chess_board, my_pos, adv_pos) 
+            return self.opponent_edge_heuristic(chess_board, my_pos, adv_pos) 
         og_pos = my_pos if is_max else adv_pos
         other_pos = adv_pos if is_max else my_pos
-        # Start w/ adv so we don't add it
-        potential_places = [] # Make sure we don't add it
-        frontier = [(og_pos[0],og_pos[1],0)] # Last number indicates the depth
-        while frontier:
-            nx, ny, step = frontier.pop()
-            # Don't expand nodes @ max step 
-            if step == max_step:
-                potential_places.append( (nx, ny) )
-                continue
-            # self.moves[0] = (-1,0)
-            if not chess_board[nx, ny, 0]:
-                new_pos = (nx - 1, ny)
-                if new_pos not in potential_places:
-                    frontier.append((new_pos[0], new_pos[1], step+1))
-            # self.moves[1] = (0, 1)    
-            if not chess_board[nx, ny, 1]:
-                new_pos = (nx, ny + 1)
-                if new_pos not in potential_places:
-                    frontier.append((new_pos[0], new_pos[1], step+1))
-
-            # self.moves[2] = (1, 0)       
-            if not chess_board[nx, ny, 2]:
-                new_pos = (nx + 1, ny)
-                if new_pos not in potential_places:
-                    frontier.append((new_pos[0], new_pos[1], step+1))
-            # self.moves[3] = (0, -1)    
-            if not chess_board[nx, ny, 3]:
-                new_pos =(nx, ny - 1)
-                if new_pos not in potential_places:
-                    frontier.append((new_pos[0], new_pos[1], step+1))
-            if (nx,ny) not in potential_places:
-                potential_places.append( (nx, ny) )    
-        try:
-            potential_places.remove(other_pos)
-        except ValueError:
-            pass           
+        potential_places = self.get_potential_places(chess_board, og_pos, other_pos, max_step)
         # Otherwise, loop over successors    
         if is_max:
             for i in potential_places:
@@ -200,41 +245,7 @@ class StudentAgent(Agent):
         Please check the sample implementation in agents/random_agent.py or agents/human_agent.py for more details.
         """
         # Do first ab_pruning level ourselves
-        potential_places = [] # Make sure we don't add it
-        frontier = [(my_pos[0],my_pos[1],0)] # Last number indicates the depth
-        while frontier:
-            nx, ny, step = frontier.pop()
-            # Don't expand nodes @ max step 
-            if step == max_step:
-                potential_places.append( (nx, ny) )
-                continue
-            # self.moves[0] = (-1,0)
-            if not chess_board[nx, ny, 0]:
-                new_pos = (nx - 1, ny)
-                if new_pos not in potential_places:
-                    frontier.append((new_pos[0], new_pos[1], step+1))
-            # self.moves[1] = (0, 1)    
-            if not chess_board[nx, ny, 1]:
-                new_pos = (nx, ny + 1)
-                if new_pos not in potential_places:
-                    frontier.append((new_pos[0], new_pos[1], step+1))
-
-            # self.moves[2] = (1, 0)       
-            if not chess_board[nx, ny, 2]:
-                new_pos = (nx + 1, ny)
-                if new_pos not in potential_places:
-                    frontier.append((new_pos[0], new_pos[1], step+1))
-            # self.moves[3] = (0, -1)    
-            if not chess_board[nx, ny, 3]:
-                new_pos =(nx, ny - 1)
-                if new_pos not in potential_places:
-                    frontier.append((new_pos[0], new_pos[1], step+1))
-            if (nx,ny) not in potential_places:
-                potential_places.append( (nx, ny) )       
-        try:
-            potential_places.remove(adv_pos)   
-        except ValueError:
-            pass            
+        potential_places = self.get_potential_places(chess_board, my_pos, adv_pos, max_step)  
         # Start ab pruning       
         alpha = -inf
         beta = inf
