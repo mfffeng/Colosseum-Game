@@ -75,59 +75,6 @@ class StudentAgent(Agent):
             return False, p0_score, p1_score
         return True, p0_score, p1_score
 
-    def random_move_heuristic(self, chess_board, my_pos, adv_pos):
-        endgame = (False, 1, 1)
-        board_size = chess_board.shape[0]
-        new_board = np.copy(chess_board)
-        while not endgame[0]:
-            indices = np.where(new_board == False)
-            rand_ind = np.random.randint(0, len(indices[0]))
-            r = indices[0][rand_ind]
-            c = indices[1][rand_ind]
-            dir = indices[2][rand_ind]
-            # Place barrier
-            new_board[r, c, dir] = True
-            # Place barrier on opposite side
-            move = moves[dir]
-            new_board[r + move[0], c + move[1], (dir + 2) % 4] = True
-            endgame = self.check_endgame(board_size, new_board, my_pos, adv_pos);    
-        # our score - their score
-        return endgame[2] - endgame[1]
-
-
-    # Weigh walls by radius from user    
-    def wall_count_heuristic(self, board, my_pos, adv_pos):
-        new_board = np.copy(board)
-        my_count = 0
-        wall_count = 0
-        # Edge walls are only being counted once, must account for
-        for i in range(0, board.shape[0]):
-            for j in range(0, board.shape[1]):
-                val = np.sqrt((i-my_pos[0])*(i-my_pos[0]) + (j-my_pos[1])*(j-my_pos[1]))
-                val -= np.sqrt((i-adv_pos[0])*(i-adv_pos[0]) + (j-adv_pos[1])*(j-adv_pos[1]))
-                
-                # moves = ((-1, 0), (0, 1), (1, 0), (0, -1))
-                if new_board[i,j,0]:
-                    my_count += val
-                    if i != 0:
-                        new_board[i-1,j,2]=False
-                    wall_count += 1    
-                if new_board[i,j,1]:
-                    my_count += val
-                    if j != board.shape[0]-1:
-                        new_board[i,j+1,3]=False
-                    wall_count += 1      
-                if new_board[i,j,2]:
-                    my_count += val
-                    if i != board.shape[0]-1:
-                        new_board[i+1,j,0]=False
-                    wall_count += 1      
-                if new_board[i,j,3]:
-                    my_count += val
-                    if j != 0:
-                        new_board[i,j-1,1]=False
-                    wall_count += 1      
-        return (10.0/board.shape[0]) * my_count / wall_count
 
     @staticmethod
     def opponent_edge_heuristic(board, my_pos, adv_pos):
@@ -136,17 +83,17 @@ class StudentAgent(Agent):
         min_y_adv = min(board.shape[1] - adv_pos[1], adv_pos[1]+1)
         min_x = min(board.shape[0] - my_pos[0], my_pos[0]+1)
         min_y = min(board.shape[1] - my_pos[1], my_pos[1]+1)
-        corner_heur = (0.1/(board.shape[0]))*((min_x+min_y) - (min_x_adv+min_y_adv))
+        corner_heur = (0.2/(board.shape[0]))*((min_x+min_y) - (min_x_adv+min_y_adv))
         # walls around
         my_w_count = 1
         adv_w_count = 1
         for i in range(0,4):
             if board[my_pos[0],my_pos[1],i]:
-                my_w_count *= 2
+                my_w_count *= 3
             if board[adv_pos[0],adv_pos[1],i]:
-                adv_w_count *= 2                
-        w_heur = 0.01*(adv_w_count*adv_w_count - my_w_count*my_w_count) 
-        return 0.2*(0.9*corner_heur + 0.1 * w_heur)
+                adv_w_count *= 3                
+        w_heur = 0.1*(adv_w_count - my_w_count) 
+        return 0.2*(0.8*corner_heur + 0.2 * w_heur)
     
     @staticmethod
     def get_potential_places(board, og_pos, other_pos, max_step):
@@ -183,7 +130,7 @@ class StudentAgent(Agent):
                     frontier.append((new_pos[0], new_pos[1], step+1))
             if (nx,ny) not in potential_places:
                 potential_places.append( (nx, ny) )             
-        return sorted(potential_places, key=lambda x: (x[0] - other_pos[0]) ** 2 + (x[1] - other_pos[1] ** 2))[:20]        
+        return sorted(potential_places, key=lambda x: abs(x[0] - other_pos[0]) + abs(x[1] - other_pos[1]) )[:15]        
 
 
     # returns score
