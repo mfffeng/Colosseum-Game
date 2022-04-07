@@ -7,7 +7,7 @@ import numpy as np
 import sys
 
 
-
+moves = ((-1,0),(0,1),(1,0),(0,-1))
 @register_agent("student_agent")
 class StudentAgent(Agent):
     """
@@ -24,11 +24,10 @@ class StudentAgent(Agent):
             "d": 2,
             "l": 3,
         }
-        self.moves = ((-1, 0), (0, 1), (1, 0), (0, -1))
         self.autoplay = True
         
  
-    def check_endgame(self, board_size, chessboard, p0_pos, p1_pos):
+    def check_endgame(board_size, chessboard, p0_pos, p1_pos):
         """
         Check if the game ends and compute the current score of the agents.
 
@@ -57,7 +56,7 @@ class StudentAgent(Agent):
 
         for r in range(board_size):
             for c in range(board_size):
-                for dir, move in enumerate(self.moves[1:3]):  # Only check down and right
+                for dir, move in enumerate(moves[1:3]):  # Only check down and right
                     if chessboard[r, c, dir + 1]:
                         continue
                     pos_a = find((r, c))
@@ -89,7 +88,7 @@ class StudentAgent(Agent):
             # Place barrier
             new_board[r, c, dir] = True
             # Place barrier on opposite side
-            move = self.moves[dir]
+            move = moves[dir]
             new_board[r + move[0], c + move[1], (dir + 2) % 4] = True
             endgame = self.check_endgame(board_size, new_board, my_pos, adv_pos);    
         # our score - their score
@@ -130,14 +129,27 @@ class StudentAgent(Agent):
                     wall_count += 1      
         return (10.0/board.shape[0]) * my_count / wall_count
 
-    def opponent_edge_heuristic(self, board, my_pos, adv_pos):
+    @staticmethod
+    def opponent_edge_heuristic(board, my_pos, adv_pos):
+        # Dist from corner
         min_x_adv = min(board.shape[0]- adv_pos[0], adv_pos[0]+1)
         min_y_adv = min(board.shape[1] - adv_pos[1], adv_pos[1]+1)
         min_x = min(board.shape[0] - my_pos[0], my_pos[0]+1)
         min_y = min(board.shape[1] - my_pos[1], my_pos[1]+1)
-        return 0.1*((1.0/(min_x_adv+min_y_adv)) - (1.0/(min_x+min_y)))
-
-    def get_potential_places(self, board, og_pos, other_pos, max_step):
+        corner_heur = (0.1/(board.shape[0]))*((min_x+min_y) - (min_x_adv+min_y_adv))
+        # walls around
+        my_w_count = 1
+        adv_w_count = 1
+        for i in range(0,4):
+            if board[my_pos[0],my_pos[1],i]:
+                my_w_count *= 2
+            if board[adv_pos[0],adv_pos[1],i]:
+                adv_w_count *= 2                
+        w_heur = 0.01*(adv_w_count*adv_w_count - my_w_count*my_w_count) 
+        return 0.2*(0.9*corner_heur + 0.1 * w_heur)
+    
+    @staticmethod
+    def get_potential_places(board, og_pos, other_pos, max_step):
         # Start w/ adv so we don't add it
         potential_places = [] # Make sure we don't add it
         frontier = [(og_pos[0],og_pos[1],0)] # Last number indicates the depth
@@ -151,57 +163,57 @@ class StudentAgent(Agent):
             # self.moves[0] = (-1,0)
             if not board[nx, ny, 0]:
                 new_pos = (nx - 1, ny)
-                if new_pos not in potential_places and new_pos != other_pos:
+                if new_pos != other_pos:
                     frontier.append((new_pos[0], new_pos[1], step+1))
             # self.moves[1] = (0, 1)    
             if not board[nx, ny, 1]:
                 new_pos = (nx, ny + 1)
-                if new_pos not in potential_places and new_pos != other_pos:
+                if new_pos != other_pos:
                     frontier.append((new_pos[0], new_pos[1], step+1))
 
             # self.moves[2] = (1, 0)       
             if not board[nx, ny, 2]:
                 new_pos = (nx + 1, ny)
-                if new_pos not in potential_places and new_pos != other_pos:
+                if new_pos != other_pos:
                     frontier.append((new_pos[0], new_pos[1], step+1))
             # self.moves[3] = (0, -1)    
             if not board[nx, ny, 3]:
                 new_pos =(nx, ny - 1)
-                if new_pos not in potential_places and new_pos != other_pos:
+                if new_pos != other_pos:
                     frontier.append((new_pos[0], new_pos[1], step+1))
             if (nx,ny) not in potential_places:
-                potential_places.append( (nx, ny) ) 
-        return potential_places        
+                potential_places.append( (nx, ny) )             
+        return sorted(potential_places, key=lambda x: (x[0] - other_pos[0]) ** 2 + (x[1] - other_pos[1] ** 2))[:20]        
 
 
     # returns score
-    def a_b_pruning(self, chess_board, my_pos, adv_pos, max_step, alpha=-inf, beta=inf, is_max=True, level=0):
+    @staticmethod
+    def a_b_pruning(chess_board, my_pos, adv_pos, max_step, alpha=-inf, beta=inf, is_max=True, level=0):
         board_size = chess_board.shape[0]
 
         # Check if leaf node                
-        endgame = self.check_endgame(board_size, chess_board, my_pos, adv_pos)
+        endgame = StudentAgent.check_endgame(board_size, chess_board, my_pos, adv_pos)
         if endgame[0]:
             # If it's leaf, return the score
             return endgame[1] - endgame[2]
         
         # Heuristic at depth 2    
         if level >= 2:
-            return self.opponent_edge_heuristic(chess_board, my_pos, adv_pos) 
-        og_pos = my_pos if is_max else adv_pos
-        other_pos = adv_pos if is_max else my_pos
-        potential_places = self.get_potential_places(chess_board, og_pos, other_pos, max_step)
+            return StudentAgent.opponent_edge_heuristic(chess_board, my_pos, adv_pos) 
+        
         # Otherwise, loop over successors    
         if is_max:
+            potential_places = StudentAgent.get_potential_places(chess_board, my_pos, adv_pos, max_step)
             for i in potential_places:
                 for dir in [0,1,2,3]:
                     if chess_board[ i[0], i[1], dir]:
                         continue
                     # Make change 
                     chess_board[i[0], i[1], dir] = True
-                    move = self.moves[dir]
+                    move = moves[dir]
                     chess_board[i[0] + move[0], i[1] + move[1], (dir + 2) % 4] = True
                     # Recursive
-                    min_val = self.a_b_pruning(chess_board, i, adv_pos, max_step, alpha, beta, False, level+1)
+                    min_val = StudentAgent.a_b_pruning(chess_board, i, adv_pos, max_step, alpha, beta, False, level+1)
                     alpha = max(alpha, min_val)
                     # Undo Change
                     chess_board[i[0], i[1], dir] = False
@@ -210,16 +222,17 @@ class StudentAgent(Agent):
                         return beta
             return alpha
         else:
+            potential_places = StudentAgent.get_potential_places(chess_board, adv_pos, my_pos, max_step)
             for i in potential_places:
                 for dir in [0,1,2,3]:
                     if chess_board[ i[0], i[1], dir]:
                         continue
                     # Make Change
                     chess_board[i[0], i[1], dir] = True
-                    move = self.moves[dir]
+                    move = moves[dir]
                     chess_board[i[0] + move[0], i[1] + move[1], (dir + 2) % 4] = True
                     # Recursive
-                    max_val = self.a_b_pruning(chess_board, my_pos, i, max_step, alpha, beta, True, level+1)
+                    max_val = StudentAgent.a_b_pruning(chess_board, my_pos, i, max_step, alpha, beta, True, level+1)
                     beta = min(beta, max_val)
                     # Undo Change
                     chess_board[i[0], i[1], dir] = False
@@ -255,7 +268,7 @@ class StudentAgent(Agent):
                     continue
                 # Make change 
                 chess_board[i[0], i[1], dir] = True
-                move = self.moves[dir]
+                move = moves[dir]
                 chess_board[i[0] + move[0], i[1] + move[1], (dir + 2) % 4] = True
                 # Recursive
                 min_val = self.a_b_pruning(chess_board, i, adv_pos, max_step, alpha, beta, False, 1)
