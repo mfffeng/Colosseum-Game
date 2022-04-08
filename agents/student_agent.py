@@ -1,9 +1,6 @@
 # Student agent: Add your own agent here
-from cmath import inf
-from multiprocessing.sharedctypes import Value
 from agents.agent import Agent
 from store import register_agent
-import numpy as np
 import sys
 
 
@@ -135,7 +132,7 @@ class StudentAgent(Agent):
 
     # returns score
     @staticmethod
-    def a_b_pruning(chess_board, my_pos, adv_pos, max_step, alpha=-inf, beta=inf, is_max=True, level=0):
+    def a_b_pruning(chess_board, my_pos, adv_pos, max_step, alpha=-9999999, beta=9999999, is_max=True, level=0):
         board_size = chess_board.shape[0]
 
         # Check if leaf node                
@@ -207,8 +204,8 @@ class StudentAgent(Agent):
         # Do first ab_pruning level ourselves
         potential_places = self.get_potential_places(chess_board, my_pos, adv_pos, max_step)  
         # Start ab pruning       
-        alpha = -inf
-        beta = inf
+        alpha = -9999999
+        beta = 9999999
         for i in potential_places:
             for dir in [0,1,2,3]:
                 if chess_board[ i[0], i[1], dir]:
